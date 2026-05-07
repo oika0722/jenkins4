@@ -1,0 +1,78 @@
+pipeline {
+    agent any
+
+    tools {
+        maven 'maven'
+        jdk 'jdk21'
+    }
+
+    environment {
+        GH_TOKEN = credentials('github-token')
+        REPO_NAME = 'https://github.com/oika0722/jenkins4.git'
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Clean & Compile') {
+            steps {
+                bat 'mvn clean compile'
+            }
+        }
+
+        stage('Static Code Analysis') {
+            steps {
+                bat 'mvn spotbugs:check || exit 0'
+                bat 'mvn checkstyle:check || exit 0'
+                bat 'mvn pmd:check || exit 0'
+
+                recordIssues tools: [
+                    spotBugs(pattern: '**/spotbugsXml.xml'),
+                    checkStyle(pattern: '**/checkstyle-result.xml'),
+                    pmdParser(pattern: '**/pmd.xml')
+                ]
+            }
+        }
+
+        stage('Build JAR') {
+            steps {
+                bat 'mvn package -DskipTests'
+            }
+        }
+
+        stage('Archive Artifact') {
+            steps {
+                archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
+            }
+        }
+// ТОЛЬКО ДЛЯ MAIN: загрузка в GitHub Releases
+    stage('GitHub Release') {
+        steps {
+            script {
+                def jarFile = "target/JenkinsProjj-1.0-SNAPSHOT-jar-with-dependencies.jar"
+                def tagName = "release-v${BUILD_NUMBER}"
+
+                bat """
+                    gh release create ${tagName} \
+                        ${jarFile} \
+                        --repo ${REPO_NAME} \
+                        --title "Production Release ${BUILD_NUMBER}" \
+                        --notes "Jenkins main branch Release" \
+                        --latest=true
+                """
+                echo "✅ Создан релиз на GitHub"
+            }
+        }
+    }
+}
+
+    post {
+        success {
+            echo "✅ MAIN ветка: сборка и релиз успешны"
+        }
+    }
+}
