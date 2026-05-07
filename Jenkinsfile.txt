@@ -37,18 +37,6 @@ pipeline {
                 ]
             }
         }
-
-        stage('Build JAR') {
-            steps {
-                bat 'mvn package -DskipTests'
-            }
-        }
-
-        stage('Archive Artifact') {
-            steps {
-                archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
-            }
-        }
 }
 
     post {
